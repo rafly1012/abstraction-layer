@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Image Search Abstraction</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+      body {
+        font-family: system-ui, -apple-system, Arial;
+        background: #0b1220;
+        color: #e6eef8;
+        margin: 0;
+        padding: 20px;
+      }
+      .wrap {
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+      header {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 12px;
+        flex-wrap: wrap;
+      }
+      input[type="text"] {
+        padding: 10px;
+        border-radius: 8px;
+        border: none;
+        min-width: 250px;
+      }
+      button {
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: none;
+        background: #2563eb;
+        color: white;
+        cursor: pointer;
+      }
+      .results {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 12px;
+        margin-top: 16px;
+      }
+      .card {
+        background: rgba(255, 255, 255, 0.03);
+        padding: 10px;
+        border-radius: 10px;
+        overflow: hidden;
+        transition: transform 0.12s;
+      }
+      .card img {
+        width: 100%;
+        height: 160px;
+        object-fit: cover;
+        border-radius: 8px;
+        display: block;
+      }
+      .meta {
+        margin-top: 8px;
+        font-size: 0.95rem;
+        color: #cbd5e1;
+      }
+      .recent {
+        margin-top: 18px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .recent button {
+        background: transparent;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        color: #cbd5e1;
+        padding: 6px 8px;
+        border-radius: 8px;
+      }
+      .pagination {
+        margin-top: 14px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <h2>Image Search</h2>
+        <input
+          id="q"
+          type="text"
+          placeholder="Search images (e.g. lolcats funny)"
+        />
+        <button id="searchBtn">Search</button>
+        <div style="margin-left: auto" id="status"></div>
+      </header>
+
+      <div class="recent" id="recent"></div>
+
+      <div class="results" id="results"></div>
+
+      <div class="pagination" id="pagination" style="display: none">
+        <button id="prevBtn">Prev</button>
+        <span id="pageInfo"></span>
+        <button id="nextBtn">Next</button>
+      </div>
+
+      <footer style="margin-top: 24px; color: #94a3b8">
+        Backend: Unsplash (via your server). Recent searches are stored
+        server-side.
+      </footer>
+    </div>
+
+    <script>
+      const statusEl = document.getElementById("status");
+      const qInput = document.getElementById("q");
+      const searchBtn = document.getElementById("searchBtn");
+      const resultsEl = document.getElementById("results");
+      const recentEl = document.getElementById("recent");
+      const prevBtn = document.getElementById("prevBtn");
+      const nextBtn = document.getElementById("nextBtn");
+      const pageInfo = document.getElementById("pageInfo");
+      const pagination = document.getElementById("pagination");
+
+      let currentQuery = "";
+      let currentPage = 1;
+      let perPage = 12;
+      let total = 0;
+
+      async function loadRecent() {
+        try {
+          const r = await fetch("/api/recent");
+          const items = await r.json();
+          recentEl.innerHTML =
+            items
+              .map((it) => {
+                const when = new Date(it.when);
+                return `<button data-term="${encodeURIComponent(it.term)}">${
+                  it.term
+                }</button>`;
+              })
+              .join("") ||
+            '<span style="color:#94a3b8">No recent searches</span>';
+          // attach listeners
+          recentEl.querySelectorAll("button").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              qInput.value = btn.getAttribute("data-term");
+              doSearch();
+            });
+          });
+        } catch (err) {
+          console.error("recent load failed", err);
+        }
+      }
+
+      async function doSearch(page = 1) {
+        const q = qInput.value.trim();
+        if (!q) return;
+        statusEl.textContent = "Searching...";
+        resultsEl.innerHTML = "";
+        pagination.style.display = "none";
+
+        try {
+          const res = await fetch(
+            `/api/images?q=${encodeURIComponent(
+              q
+            )}&page=${page}&per_page=${perPage}`
+          );
+          if (!res.ok) throw new Error("Search failed");
+          const json = await res.json();
+          currentQuery = q;
+          currentPage = page;
+          total = json.total || 0;
+          renderResults(json.results || []);
+          updatePagination();
+          statusEl.textContent = `Showing page ${currentPage} — total results (approx): ${total}`;
+          // refresh recent list after search
+          loadRecent();
+        } catch (err) {
+          console.error(err);
+          statusEl.textContent = "Search failed";
+        }
+      }
+
+      function renderResults(list) {
+        if (!list.length) {
+          resultsEl.innerHTML = '<div style="color:#94a3b8">No results</div>';
+          return;
+        }
+        resultsEl.innerHTML = list
+          .map(
+            (it) => `
+      <div class="card">
+        <a href="${
+          it.pageUrl || "#"
+        }" target="_blank" rel="noopener noreferrer">
+          <img alt="${escapeHtml(it.description || "")}" src="${it.imageUrl}" />
+        </a>
+        <div class="meta">
+          <div><strong>${escapeHtml(
+            it.description || "Untitled"
+          )}</strong></div>
+          <div style="font-size:0.85rem;margin-top:6px">
+            <a style="color:#93c5fd" target="_blank" href="${
+              it.photographerProfile || "#"
+            }">${escapeHtml(it.photographer || "")}</a>
+          </div>
+        </div>
+      </div>
+    `
+          )
+          .join("");
+      }
+
+      function updatePagination() {
+        // Unsplash returns total but often large — show Prev/Next control if we have results
+        pagination.style.display = "flex";
+        pageInfo.textContent = `Page ${currentPage}`;
+        prevBtn.disabled = currentPage <= 1;
+        // Next is enabled always — user can click until no results (Unsplash will return empty)
+      }
+
+      searchBtn.addEventListener("click", () => doSearch(1));
+      qInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") doSearch(1);
+      });
+      prevBtn.addEventListener("click", () => {
+        if (currentPage > 1) doSearch(currentPage - 1);
+      });
+      nextBtn.addEventListener("click", () => doSearch(currentPage + 1));
+
+      // Escape HTML helper
+      function escapeHtml(str) {
+        return (str || "").replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            }[c])
+        );
+      }
+
+      // initial load recent
+      loadRecent();
+    </script>
+  </body>
+</html>
