@@ -13,54 +13,81 @@
         padding: 20px;
       }
       .wrap {
-        max-width: 1100px;
+        max-width: 1200px;
         margin: 0 auto;
       }
       header {
         display: flex;
         gap: 12px;
         align-items: center;
-        margin-bottom: 12px;
+        margin-bottom: 16px;
         flex-wrap: wrap;
       }
       input[type="text"] {
-        padding: 10px;
-        border-radius: 8px;
+        padding: 10px 14px;
+        border-radius: 10px;
         border: none;
-        min-width: 250px;
+        min-width: 280px;
+        font-size: 1rem;
+        background: #1e293b;
+        color: #f1f5f9;
+        outline: none;
       }
       button {
-        padding: 10px 12px;
-        border-radius: 8px;
+        padding: 10px 16px;
+        border-radius: 10px;
         border: none;
-        background: #2563eb;
+        background: linear-gradient(135deg, #2563eb, #1d4ed8);
         color: white;
         cursor: pointer;
+        font-weight: 500;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
       }
       .results {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        gap: 12px;
-        margin-top: 16px;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 16px;
+        margin-top: 20px;
       }
       .card {
-        background: rgba(255, 255, 255, 0.03);
-        padding: 10px;
-        border-radius: 10px;
+        background: #1e293b;
+        border-radius: 12px;
         overflow: hidden;
-        transition: transform 0.12s;
+        transition: transform 0.2s, box-shadow 0.2s;
+        display: flex;
+        flex-direction: column;
+      }
+      .card:hover {
+        transform: translateY(-4px) scale(1.02);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
       }
       .card img {
         width: 100%;
-        height: 160px;
+        height: 200px;
         object-fit: cover;
-        border-radius: 8px;
         display: block;
       }
       .meta {
-        margin-top: 8px;
-        font-size: 0.95rem;
+        padding: 10px;
+        font-size: 0.9rem;
         color: #cbd5e1;
+      }
+      .meta strong {
+        color: #f1f5f9;
+        display: block;
+        margin-bottom: 4px;
+      }
+      .meta a {
+        color: #60a5fa;
+        text-decoration: none;
+        font-size: 0.85rem;
+      }
+      .meta a:hover {
+        text-decoration: underline;
       }
       .recent {
         margin-top: 18px;
@@ -70,28 +97,40 @@
       }
       .recent button {
         background: transparent;
-        border: 1px solid rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.1);
         color: #cbd5e1;
-        padding: 6px 8px;
+        padding: 6px 10px;
         border-radius: 8px;
+        font-size: 0.85rem;
+      }
+      .recent button:hover {
+        background: rgba(255, 255, 255, 0.08);
       }
       .pagination {
-        margin-top: 14px;
+        margin-top: 20px;
         display: flex;
-        gap: 8px;
+        gap: 12px;
         align-items: center;
+        justify-content: center;
+      }
+      .skeleton {
+        background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.5s infinite;
+        border-radius: 12px;
+        height: 200px;
+      }
+      @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
       }
     </style>
   </head>
   <body>
     <div class="wrap">
       <header>
-        <h2>Image Search</h2>
-        <input
-          id="q"
-          type="text"
-          placeholder="Search images (e.g. lolcats funny)"
-        />
+        <h2 style="margin:0;">🔎 Image Search</h2>
+        <input id="q" type="text" placeholder="Search images (e.g. cats funny)" />
         <button id="searchBtn">Search</button>
         <div style="margin-left: auto" id="status"></div>
       </header>
@@ -101,14 +140,13 @@
       <div class="results" id="results"></div>
 
       <div class="pagination" id="pagination" style="display: none">
-        <button id="prevBtn">Prev</button>
+        <button id="prevBtn">⬅ Prev</button>
         <span id="pageInfo"></span>
-        <button id="nextBtn">Next</button>
+        <button id="nextBtn">Next ➡</button>
       </div>
 
-      <footer style="margin-top: 24px; color: #94a3b8">
-        Backend: Unsplash (via your server). Recent searches are stored
-        server-side.
+      <footer style="margin-top: 24px; color: #94a3b8; font-size: 0.85rem;">
+        Powered by Unsplash API — Recent searches are stored server-side.
       </footer>
     </div>
 
@@ -125,100 +163,87 @@
 
       let currentQuery = "";
       let currentPage = 1;
-      let perPage = 12;
-      let total = 0;
+      const perPage = 12;
 
       async function loadRecent() {
         try {
           const r = await fetch("/api/recent");
           const items = await r.json();
           recentEl.innerHTML =
-            items
-              .map((it) => {
-                const when = new Date(it.when);
-                return `<button data-term="${encodeURIComponent(it.term)}">${
-                  it.term
-                }</button>`;
-              })
-              .join("") ||
-            '<span style="color:#94a3b8">No recent searches</span>';
-          // attach listeners
+            items.length > 0
+              ? items
+                  .map(
+                    (it) => `<button data-term="${encodeURIComponent(it.term)}">${it.term}</button>`
+                  )
+                  .join("")
+              : '<span style="color:#94a3b8">No recent searches</span>';
           recentEl.querySelectorAll("button").forEach((btn) => {
             btn.addEventListener("click", () => {
-              qInput.value = btn.getAttribute("data-term");
-              doSearch();
+              qInput.value = decodeURIComponent(btn.dataset.term);
+              doSearch(1);
             });
           });
         } catch (err) {
-          console.error("recent load failed", err);
+          console.error("Failed to load recent searches", err);
         }
       }
 
       async function doSearch(page = 1) {
         const q = qInput.value.trim();
         if (!q) return;
+        currentQuery = q;
+        currentPage = page;
+
         statusEl.textContent = "Searching...";
-        resultsEl.innerHTML = "";
+        resultsEl.innerHTML = Array(perPage)
+          .fill(0)
+          .map(() => `<div class="skeleton"></div>`)
+          .join("");
         pagination.style.display = "none";
 
         try {
-          const res = await fetch(
-            `/api/images?q=${encodeURIComponent(
-              q
-            )}&page=${page}&per_page=${perPage}`
-          );
+          const url = `/api/imagesearch/${encodeURIComponent(q)}?page=${page}&per_page=${perPage}`;
+          const res = await fetch(url);
           if (!res.ok) throw new Error("Search failed");
-          const json = await res.json();
-          currentQuery = q;
-          currentPage = page;
-          total = json.total || 0;
-          renderResults(json.results || []);
+          const results = await res.json();
+
+          renderResults(results);
           updatePagination();
-          statusEl.textContent = `Showing page ${currentPage} — total results (approx): ${total}`;
-          // refresh recent list after search
+          statusEl.textContent = `Showing page ${page} — ${results.length} results`;
           loadRecent();
         } catch (err) {
           console.error(err);
           statusEl.textContent = "Search failed";
+          resultsEl.innerHTML = '<div style="color:#94a3b8">⚠️ Failed to load results</div>';
         }
       }
 
       function renderResults(list) {
-        if (!list.length) {
-          resultsEl.innerHTML = '<div style="color:#94a3b8">No results</div>';
+        if (!list || list.length === 0) {
+          resultsEl.innerHTML = '<div style="color:#94a3b8">No results found</div>';
           return;
         }
         resultsEl.innerHTML = list
           .map(
             (it) => `
-      <div class="card">
-        <a href="${
-          it.pageUrl || "#"
-        }" target="_blank" rel="noopener noreferrer">
-          <img alt="${escapeHtml(it.description || "")}" src="${it.imageUrl}" />
-        </a>
-        <div class="meta">
-          <div><strong>${escapeHtml(
-            it.description || "Untitled"
-          )}</strong></div>
-          <div style="font-size:0.85rem;margin-top:6px">
-            <a style="color:#93c5fd" target="_blank" href="${
-              it.photographerProfile || "#"
-            }">${escapeHtml(it.photographer || "")}</a>
-          </div>
-        </div>
-      </div>
-    `
+              <div class="card">
+                <a href="${it.pageUrl}" target="_blank" rel="noopener noreferrer">
+                  <img src="${it.imageUrl}" alt="${escapeHtml(it.description)}" />
+                </a>
+                <div class="meta">
+                  <strong>${escapeHtml(it.description)}</strong>
+                  <a href="${it.photographerProfile}" target="_blank">${escapeHtml(it.photographer)}</a>
+                </div>
+              </div>
+            `
           )
           .join("");
       }
 
       function updatePagination() {
-        // Unsplash returns total but often large — show Prev/Next control if we have results
         pagination.style.display = "flex";
         pageInfo.textContent = `Page ${currentPage}`;
         prevBtn.disabled = currentPage <= 1;
-        // Next is enabled always — user can click until no results (Unsplash will return empty)
       }
 
       searchBtn.addEventListener("click", () => doSearch(1));
@@ -230,22 +255,18 @@
       });
       nextBtn.addEventListener("click", () => doSearch(currentPage + 1));
 
-      // Escape HTML helper
       function escapeHtml(str) {
-        return (str || "").replace(
-          /[&<>"']/g,
-          (c) =>
-            ({
-              "&": "&amp;",
-              "<": "&lt;",
-              ">": "&gt;",
-              '"': "&quot;",
-              "'": "&#39;",
-            }[c])
+        return (str || "").replace(/[&<>"']/g, (c) =>
+          ({
+            "&": "&amp;",
+            "<": "<",
+            ">": ">",
+            '"': "&quot;",
+            "'": "&#39;",
+          }[c])
         );
       }
 
-      // initial load recent
       loadRecent();
     </script>
   </body>

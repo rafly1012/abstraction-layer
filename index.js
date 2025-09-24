@@ -1,58 +1,66 @@
-var express = require("express");
-var cors = require("cors");
-var fetch = require("node-fetch"); // pastikan install: npm install node-fetch
+const express = require("express");
+const cors = require("cors");
+const fetch = require("node-fetch");
 require("dotenv").config();
 
-var app = express();
+const app = express();
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use("/public", express.static(process.cwd() + "/public"));
+app.use(express.static("public"));
 
-// Simpan query pencarian
+// Simpan 10 pencarian terbaru
 let recentSearches = [];
 
-// halaman utama
-app.get("/", function (req, res) {
-  res.sendFile(process.cwd() + "/views/index.html");
+// Serve halaman utama
+app.get("/", (req, res) => {
+  res.sendFile(__dirname + "/views/index.html");
 });
 
-// route image search
+// API: Cari gambar
 app.get("/api/imagesearch/:query", async (req, res) => {
   const query = req.params.query;
-  const page = req.query.page || 1;
+  const page = parseInt(req.query.page) || 1;
+  const perPage = Math.min(parseInt(req.query.per_page) || 10, 30);
 
-  // simpan query ke recentSearches
+  // Simpan ke riwayat (maks 10)
   recentSearches.unshift({ term: query, when: new Date().toISOString() });
-  if (recentSearches.length > 10) recentSearches.pop(); // hanya simpan 10 terakhir
+  if (recentSearches.length > 10) recentSearches.pop();
 
   try {
-    const response = await fetch(
-      `https://api.unsplash.com/search/photos?query=${encodeURIComponent(
-        query
-      )}&page=${page}&client_id=${process.env.UNSPLASH_ACCESS_KEY}`
-    );
+    const url = `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&page=${page}&per_page=${perPage}&client_id=${process.env.UNSPLASH_ACCESS_KEY}`;
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      return res.status(500).json({ error: "Unsplash API error" });
+    }
+
     const data = await response.json();
 
+    if (!Array.isArray(data.results)) {
+      return res.status(500).json({ error: "Invalid response from Unsplash" });
+    }
+
     const results = data.results.map((item) => ({
-      url: item.urls.full,
-      snippet: item.alt_description,
-      thumbnail: item.urls.thumb,
-      context: item.links.html,
+      imageUrl: item.urls.thumb,
+      pageUrl: item.links.html,
+      description: item.alt_description || item.description || "Untitled",
+      photographer: item.user.name,
+      photographerProfile: item.user.links.html,
     }));
 
-    res.json(results);
+    res.json(results); // Kirim array langsung
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Terjadi kesalahan saat mengambil data" });
+    res.status(500).json({ error: "Server error during image search" });
   }
 });
 
-// route recent searches
+// API: Riwayat pencarian
 app.get("/api/recent", (req, res) => {
   res.json(recentSearches);
 });
 
-const port = process.env.PORT || 3000;
-app.listen(port, function () {
-  console.log("Your app is listening on port " + port);
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
